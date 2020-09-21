@@ -29,6 +29,17 @@ class HttpCertificatePinning {
     return resp;
   }
 
+  static Future<String> get({ String serverURL, Map<String, String> headerHttp, SHA sha, List<String> allowedSHAFingerprints, int timeout }) async {
+    final Map<String, dynamic> params = <String, dynamic>{
+      "url" : serverURL,
+      "headers" : headerHttp,
+      "type": sha.toString().split(".").last,
+      "timeout" : timeout
+    };
+    String resp = await _channel.invokeMethod('get', params);
+    return resp;
+  }
+
   Future _platformCallHandler(MethodCall call) async {
     print("_platformCallHandler call ${call.method} ${call.arguments}");
   }

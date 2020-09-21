@@ -22,7 +22,14 @@ public class SwiftHttpCertificatePinningPlugin: NSObject, FlutterPlugin {
                 if let _args = call.arguments as? Dictionary<String, AnyObject> {
                     self.check(call: call, args: _args)
                 } else {
-                    result(FlutterError(code: "Arguments vide", message: "Veuillez préciser les arguments", details: nil))
+                    result(FlutterError(code: "Arguments empty", message: "Please specify the arguments", details: nil))
+                }
+                break
+            case "get":
+                if let _args = call.arguments as? Dictionary<String, AnyObject> {
+                    self.get(call: call, args: _args)
+                } else {
+                    result(FlutterError(code: "Arguments empty", message: "Please specify the arguments", details: nil))
                 }
                 break
             default:
@@ -36,6 +43,64 @@ public class SwiftHttpCertificatePinningPlugin: NSObject, FlutterPlugin {
         }
     }
 
+    public func get(call: FlutterMethodCall, args: Dictionary<String, AnyObject>){
+
+        guard let urlString = args["url"] as? String,
+              let headers = args["headers"] as? Dictionary<String, String>,
+              let type = args["type"] as? String
+        else {
+            self.sendResponse(result: FlutterError(code: "Parameters incorrect", message: "Incorrect parameters", details: nil))
+            return
+        }
+
+        var timeout = 60
+        if let timeoutArg = args["timeout"] as? Int {
+            timeout = timeoutArg
+        }
+
+
+        Alamofire.request(urlString, parameters: headers).validate().responseJSON() { response in
+            switch response.result {
+            case .success:
+                break
+            case .failure(let error):
+                self.sendResponse(result: FlutterError(code: "URL Format", message: error.localizedDescription, details: nil))
+                break
+            }
+        }
+
+        manager.session.configuration.timeoutIntervalForRequest = TimeInterval(timeout)
+
+        manager.delegate.sessionDidReceiveChallenge = { session, challenge in
+
+            guard let serverTrust = challenge.protectionSpace.serverTrust, let certificate = SecTrustGetCertificateAtIndex(serverTrust, 0) else {
+                self.sendResponse(result: FlutterError(code: "ERROR CERT", message: "Invalid Certificate", details: nil))
+                return (.cancelAuthenticationChallenge, nil)
+            }
+
+            // Set SSL policies for domain name check
+            let policies: [SecPolicy] = [SecPolicyCreateSSL(true, (challenge.protectionSpace.host as CFString))]
+            SecTrustSetPolicies(serverTrust, policies as CFTypeRef)
+
+            // Evaluate server certificate
+            var result: SecTrustResultType = .invalid
+            SecTrustEvaluate(serverTrust, &result)
+            let isServerTrusted: Bool = (result == .unspecified || result == .proceed)
+
+            let serverCertData = SecCertificateCopyData(certificate) as Data
+            var serverCertSha;
+
+            if(type == "SHA1"){
+                serverCertSha = serverCertData.sha1().toHexString()
+            } else {
+                serverCertSha = serverCertData.sha256().toHexString()
+            }
+
+            self.sendResponse(result: serverCertSha as AnyObject)
+            return (.cancelAuthenticationChallenge, nil)
+        }
+    }
+
     public func check(call: FlutterMethodCall, args: Dictionary<String, AnyObject>){
 
         guard let urlString = args["url"] as? String,
@@ -43,7 +108,7 @@ public class SwiftHttpCertificatePinningPlugin: NSObject, FlutterPlugin {
               let fingerprints = args["fingerprints"] as? Array<String>,
               let type = args["type"] as? String
         else {
-            self.sendResponse(result: FlutterError(code: "Params incorrect", message: "Les params sont incorrect", details: nil))
+            self.sendResponse(result: FlutterError(code: "Parameters incorrect", message: "Incorrect parameters", details: nil))
             return
         }
 
@@ -83,10 +148,12 @@ public class SwiftHttpCertificatePinningPlugin: NSObject, FlutterPlugin {
             let isServerTrusted: Bool = (result == .unspecified || result == .proceed)
 
             let serverCertData = SecCertificateCopyData(certificate) as Data
-            var serverCertSha = serverCertData.sha256().toHexString()
+            var serverCertSha;
 
             if(type == "SHA1"){
                 serverCertSha = serverCertData.sha1().toHexString()
+            } else {
+                serverCertSha = serverCertData.sha256().toHexString()
             }
 
             var isSecure = false
