@@ -20,6 +20,12 @@ import java.security.NoSuchAlgorithmException
 import java.security.cert.Certificate
 import java.security.cert.CertificateEncodingException
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
+
+
 import android.os.StrictMode
 
 /** HttpCertificatePinningPlugin */
@@ -82,7 +88,7 @@ public class HttpCertificatePinningPlugin: FlutterPlugin, MethodCallHandler {
     val type: String = arguments.get("type") as String
 
     val sha: String = this.getFingerprint(serverURL, timeout, httpHeaderArgs, type)
-    resul.success(sha);
+    result.success(sha);
   }
 
   fun checkConnexion(serverURL: String, allowedFingerprints: List<String>, httpHeaderArgs: Map<String, String>, timeout: Int, type: String): Boolean {
@@ -92,6 +98,28 @@ public class HttpCertificatePinningPlugin: FlutterPlugin, MethodCallHandler {
 
   @Throws(IOException::class, NoSuchAlgorithmException::class, CertificateException::class, CertificateEncodingException::class)
   private fun getFingerprint(httpsURL: String, connectTimeout: Int, httpHeaderArgs: Map<String, String>, type: String): String {
+
+    // Create a trust manager that does not validate certificate chains
+    val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+      @Throws(CertificateException::class)
+      override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {
+      }
+
+      @Throws(CertificateException::class)
+      override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {
+      }
+
+      override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> {
+        return arrayOf()
+      }
+    })
+
+    // Install the all-trusting trust manager
+    val sslContext = SSLContext.getInstance("SSL")
+    sslContext.init(null, trustAllCerts, java.security.SecureRandom())
+    // Create an ssl socket factory with our all-trusting manager
+    val sslSocketFactory = sslContext.socketFactory
+    HttpsURLConnection.setDefaultSSLSocketFactory(sslSocketFactory)
 
     val url = URL(httpsURL)
     val httpClient: HttpsURLConnection = url.openConnection() as HttpsURLConnection
