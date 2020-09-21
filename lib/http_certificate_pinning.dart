@@ -29,7 +29,7 @@ class HttpCertificatePinning {
     return resp;
   }
 
-  static Future<String> get({ String serverURL, Map<String, String> headerHttp, SHA sha, List<String> allowedSHAFingerprints, int timeout }) async {
+  static Future<String> get({ String serverURL, Map<String, String> headerHttp, SHA sha, int timeout }) async {
     final Map<String, dynamic> params = <String, dynamic>{
       "url" : serverURL,
       "headers" : headerHttp,
